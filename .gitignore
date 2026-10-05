@@ -14,8 +14,12 @@ __pycache__/
 *.egg-info/
 .ipynb_checkpoints/
 
-# ---- Trained artifacts (regenerate with `python train.py`) ------------------
-models/*.joblib
+# ---- Trained artifacts ------------------------------------------------------
+# The models/*.joblib files ARE committed on purpose. Streamlit Community Cloud
+# only runs `streamlit run app/app.py`; it never runs `python train.py`, so the
+# serialised pipeline has to be in the repo or the deployed app has no model.
+# They total ~5.7 MB, well inside GitHub's limits. Regenerate with:
+#     python train.py
 
 # ---- OS / editor -----------------------------------------------------------
 .DS_Store
