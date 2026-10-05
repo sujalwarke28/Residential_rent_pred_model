@@ -1,0 +1,15 @@
+# Residential Rent Prediction - runtime dependencies (training + Streamlit app)
+#
+# scikit-learn is pinned EXACTLY. The saved pipeline in models/*.joblib is
+# serialised by this exact version; loading it under a different scikit-learn
+# release raises InconsistentVersionWarning and can silently break unpickling
+# of the ColumnTransformer / TargetEncoder internals.
+scikit-learn==1.9.1
+
+pandas==3.0.6
+numpy==2.5.3
+scipy==1.18.1
+matplotlib==3.11.2
+seaborn==0.13.2
+joblib==1.6.0
+streamlit==1.64.0

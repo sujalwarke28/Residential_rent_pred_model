@@ -1,0 +1,384 @@
+------------------------------------------------------------------------------
+SECTION 4 -- DATA PROFILE (real data, no assumptions)
+------------------------------------------------------------------------------
+Rows: 4,746    Columns: 12    Duplicate rows: 0
+Total explicit NaNs across the whole frame: 0
+
+Dtypes and null counts per column
+  column               dtype             nulls
+  Posted On            str                   0
+  BHK                  int64                 0
+  Rent                 int64                 0
+  Size                 int64                 0
+  Floor                str                   0
+  Area Type            str                   0
+  Area Locality        str                   0
+  City                 str                   0
+  Furnishing Status    str                   0
+  Tenant Preferred     str                   0
+  Bathroom             int64                 0
+  Point of Contact     str                   0
+
+Target `Rent` distribution (INR / month)
+  min             1,200
+  p01             4,000
+  p25            10,000
+  median         16,000
+  mean           34,993
+  p75            33,000
+  p99          3,00,000
+  max         35,00,000
+  skew            21.41   <- extreme right skew; log1p skew = 0.91
+
+`Size` plausibility (sq ft)
+  min 10   median 850   max 8000
+  implausible (< 50 sq ft): 16 rows      (< 100 sq ft: 91 rows)
+
+`Floor` string patterns (480 distinct raw strings)
+  N out of N                    3782
+  Ground out of N                926
+  Upper Basement out of N         23
+  Lower Basement out of N         11
+  N                                3
+  Ground                           1
+  rows with no 'out of' part -> total_floors is missing: 4
+  examples: ['3', 'Ground', '1']
+
+`Area Locality` cardinality
+  unique values:              2,235
+  appearing exactly once:     1,465 (30.9% of all rows)
+  appearing twice or fewer:   1,794
+  -> one-hot is untenable; TargetEncoder with smoothing is used.
+
+`Posted On` date range
+  2022-04-13 -> 2022-07-11  (89 days, 81 distinct dates)
+  -> span is far too short to express inflation or market drift;
+     dropped after profiling (reasoning recorded in the notebook).
+
+Categorical levels
+  City:
+      Mumbai                   972
+      Chennai                  891
+      Bangalore                886
+      Hyderabad                868
+      Delhi                    605
+      Kolkata                  524
+  Furnishing Status:
+      Semi-Furnished          2251
+      Unfurnished             1815
+      Furnished                680
+  Tenant Preferred:
+      Bachelors/Family        3444
+      Bachelors                830
+      Family                   472
+  Area Type:
+      Super Area              2446
+      Carpet Area             2298
+      Built Area                 2   <- rare, needs handle_unknown='ignore'
+  Point of Contact:
+      Contact Owner           3216
+      Contact Agent           1529
+      Contact Builder            1   <- rare, needs handle_unknown='ignore'
+
+Discrete numeric levels
+  BHK: {'1': 1167, '2': 2265, '3': 1098, '4': 189, '5': 19, '6': 8}
+  Bathroom: {'1': 1474, '2': 2291, '3': 749, '4': 156, '5': 60, '6': 12, '7': 3, '10': 1}
+------------------------------------------------------------------------------
+
+===============================================================================
+SECTION 5.2 -- ARE THE CONVENTIONAL AREA RATIOS SUPPORTED BY THE DATA?
+===============================================================================
+            n_groups  observed_median  observed_mean  observed_min  observed_max  conventional
+area_type                                                                                     
+Super Area        23              1.0          1.091           0.8           2.0           0.7
+
+  Super Area: conventional multiplier is 0.70, observed median is 1.00 across 23 (City, BHK) groups.
+
+  FINDING: `Built Area` has only 2 rows in the entire dataset, so no
+  (City, BHK) group reaches the minimum count and its ratio cannot be
+  estimated empirically at all -- the conventional 0.85 is used as-is.
+  For `Super Area` the observed ratio is close to 1.0, NOT the
+  conventional 0.70: within comparable flats, listings quoting super
+  area report roughly the same number as listings quoting carpet area.
+  The conversion is therefore applied as specified, but raw `Size` and
+  `Area Type` are KEPT as features so the models can ignore it.
+
+===============================================================================
+OUTLIER DETECTION -- PER-CITY IQR vs A GLOBAL IQR
+===============================================================================
+             n  per_city_flagged  global_flagged  per_city_pct  global_pct
+City                                                                      
+Bangalore  886                91              36          10.3         4.1
+Chennai    891                87              46           9.8         5.2
+Delhi      605                64              68          10.6        11.2
+Hyderabad  868                85              26           9.8         3.0
+Kolkata    524                36              16           6.9         3.1
+Mumbai     972               104             367          10.7        37.8
+
+  A single global IQR rule would flag 367 of 972 Mumbai listings (37.8%) as outliers, because the
+  global upper bound sits barely above Mumbai's median rent. Bounds are
+  therefore computed within each city.
+
+===============================================================================
+EDA FIGURES
+===============================================================================
+  saved reports/figures/eda_rent_distribution.png
+  saved reports/figures/eda_rent_by_city.png
+  saved reports/figures/eda_rent_vs_size.png
+  saved reports/figures/eda_avg_rent_by_category.png
+  saved reports/figures/eda_correlation_heatmap.png
+  saved reports/figures/eda_listings_per_city.png
+  saved reports/figures/eda_outlier_per_city_vs_global.png
+
+  KEY OBSERVATION: rent scales with size, but the scaling factor is city specific.
+  Median rent per sq ft: Mumbai 71.4,  Delhi 28.6,  Bangalore 17.5,  Chennai 16.2,  Hyderabad 14.5,  Kolkata 13.3
+  Mumbai is 5.4x Kolkata per square foot.
+
+===============================================================================
+TRAIN / TEST SPLIT
+===============================================================================
+  Dropped ['Posted On'] -- the listings span only 89 days (2022-04-13 to 2022-07-11),
+  far too short a window to carry inflation or market drift, so any
+  date-derived feature would be noise rather than signal.
+
+  train: 3,796 rows     test: 950 rows (20%, stratified by City)
+  The test split is UNTREATED and is never touched during tuning.
+
+===============================================================================
+SETTING 1. Raw rent, no treatment
+===============================================================================
+  outlier strategy = 'none': 3,796 -> 3,796 training rows (removed 0, capped 0)
+  target = raw Rent
+  scoring against the SAME untreated test set of 950 rows
+
+  Linear Regression                        CV RMSE      ₹56,548 ±    ₹37,184 | test RMSE      ₹39,566 | test R²  0.5823 |    1.7s
+  Polynomial Regression (deg 2)            CV RMSE      ₹64,566 ±    ₹34,937 | test RMSE      ₹36,384 | test R²  0.6468 |    1.5s
+  Polynomial Regression (deg 2) + Ridge    CV RMSE      ₹59,595 ±    ₹38,259 | test RMSE      ₹31,502 | test R²  0.7352 |    2.7s
+  Decision Tree                            CV RMSE      ₹54,634 ±    ₹38,274 | test RMSE      ₹40,920 | test R²  0.5532 |    3.2s
+  Random Forest                            CV RMSE      ₹50,825 ±    ₹38,580 | test RMSE      ₹34,796 | test R²  0.6770 |   42.6s
+  Gradient Boosting                        CV RMSE      ₹53,328 ±    ₹37,611 | test RMSE      ₹35,200 | test R²  0.6694 |   35.8s
+
+===============================================================================
+SETTING 2. log1p target only
+===============================================================================
+  outlier strategy = 'none': 3,796 -> 3,796 training rows (removed 0, capped 0)
+  target = log1p(Rent)
+  scoring against the SAME untreated test set of 950 rows
+
+  Linear Regression                        CV RMSE      ₹53,464 ±    ₹38,571 | test RMSE      ₹27,897 | test R²  0.7924 |    0.2s
+  Polynomial Regression (deg 2)            CV RMSE      ₹58,573 ±    ₹35,070 | test RMSE    ₹9,17,495 | test R² -223.5945 |    0.3s
+  Polynomial Regression (deg 2) + Ridge    CV RMSE      ₹55,364 ±    ₹37,036 | test RMSE    ₹1,43,423 | test R² -4.4882 |    4.0s
+  Decision Tree                            CV RMSE      ₹49,757 ±    ₹38,656 | test RMSE      ₹34,818 | test R²  0.6766 |    4.2s
+  Random Forest                            CV RMSE      ₹49,625 ±    ₹39,816 | test RMSE      ₹35,092 | test R²  0.6714 |   50.2s
+  Gradient Boosting                        CV RMSE      ₹49,039 ±    ₹39,836 | test RMSE      ₹32,716 | test R²  0.7144 |   44.9s
+
+===============================================================================
+SETTING 3a. log1p + outliers removed
+===============================================================================
+  outlier strategy = 'remove': 3,796 -> 3,413 training rows (removed 383, capped 0)
+  target = log1p(Rent)
+  scoring against the SAME untreated test set of 950 rows
+
+  Linear Regression                        CV RMSE      ₹12,362 ±       ₹976 | test RMSE      ₹33,198 | test R²  0.7060 |    0.1s
+  Polynomial Regression (deg 2)            CV RMSE      ₹12,981 ±     ₹2,303 | test RMSE      ₹41,111 | test R²  0.5491 |    0.3s
+  Polynomial Regression (deg 2) + Ridge    CV RMSE      ₹11,146 ±       ₹526 | test RMSE      ₹49,427 | test R²  0.3482 |    3.7s
+  Decision Tree                            CV RMSE      ₹11,231 ±       ₹993 | test RMSE      ₹46,731 | test R²  0.4174 |    4.2s
+  Random Forest                            CV RMSE      ₹10,295 ±       ₹827 | test RMSE      ₹46,609 | test R²  0.4204 |   48.3s
+  Gradient Boosting                        CV RMSE      ₹10,142 ±       ₹720 | test RMSE      ₹46,436 | test R²  0.4247 |   37.8s
+
+===============================================================================
+SETTING 3b. log1p + outliers capped
+===============================================================================
+  outlier strategy = 'cap': 3,796 -> 3,796 training rows (removed 0, capped 73)
+  target = log1p(Rent)
+  scoring against the SAME untreated test set of 950 rows
+
+  Linear Regression                        CV RMSE      ₹27,479 ±     ₹2,759 | test RMSE      ₹29,242 | test R²  0.7719 |    0.1s
+  Polynomial Regression (deg 2)            CV RMSE      ₹29,101 ±     ₹6,044 | test RMSE    ₹1,55,554 | test R² -5.4559 |    0.3s
+  Polynomial Regression (deg 2) + Ridge    CV RMSE      ₹26,684 ±     ₹4,854 | test RMSE      ₹46,745 | test R²  0.4170 |    3.8s
+  Decision Tree                            CV RMSE      ₹22,807 ±     ₹1,073 | test RMSE      ₹35,788 | test R²  0.6583 |    4.8s
+  Random Forest                            CV RMSE      ₹21,391 ±     ₹1,409 | test RMSE      ₹35,470 | test R²  0.6643 |   51.1s
+  Gradient Boosting                        CV RMSE      ₹19,803 ±     ₹1,884 | test RMSE      ₹35,025 | test R²  0.6727 |   45.8s
+
+  saved reports/outlier_experiment.csv
+
+  NOTE ON READING THIS TABLE: the CV columns are NOT comparable
+  across settings -- each setting cross-validates a different training
+  set (outliers removed or capped), so 'remove' shows a flatteringly low
+  CV RMSE simply because the hard rows were deleted from its folds.
+  Only the test_* columns are comparable across settings, because every
+  row is scored on the one shared, untreated test set.
+
+===============================================================================
+SECTION 12 -- MODEL SELECTION (not on RMSE alone)
+===============================================================================
+  Lowest test MAE across all 24 model/setting combinations: Gradient Boosting under '2. log1p target only'.
+  (Lowest test RMSE: Linear Regression under '2. log1p target only'.)
+  The main comparison table reports all six models under the selected setting.
+
+  Selection criteria for every model under the primary setting:
+                                model   test_rmse   test_mae  test_r2  test_mape  overfit_gap_rmse  cv_overfit_gap_rmse  cv_rmse_mean  cv_rmse_std  cv_mae_std  predict_latency_ms
+                    Gradient Boosting  32,715.990 10,134.771    0.714     26.744       -25,322.637           -5,753.191    49,039.288   39,835.510   1,600.237               6.526
+                        Random Forest  35,092.272 10,244.505    0.671     26.749       -18,145.934           -2,237.312    49,625.357   39,815.785   1,599.075              13.246
+                    Linear Regression  27,896.803 10,759.994    0.792     28.423       -37,930.549          -10,973.683    53,464.264   38,570.996   1,381.290               7.123
+                        Decision Tree  34,817.880 11,639.683    0.677     32.032       -26,507.987           -9,937.108    49,757.016   38,656.493   1,429.338               8.111
+Polynomial Regression (deg 2) + Ridge 143,422.980 15,256.544   -4.488     29.622        81,261.579           -6,953.030    55,364.229   37,036.020   1,316.824               8.157
+        Polynomial Regression (deg 2) 917,494.919 42,321.116 -223.594     42.972       854,799.652           -4,178.034    58,573.179   35,070.465   1,261.233               7.588
+
+  Shortlist (within 10% of the best test MAE): Gradient Boosting, Random Forest, Linear Regression
+  3 candidates tie on rank-sum (8) -- the four criteria do not separate them.
+  Tie broken on test MAE (stable, and the metric that matches the deployment use case).
+  SELECTED: Gradient Boosting
+  RUNNER-UP: Random Forest
+
+  Rank-sum detail (lower is better):
+            model  rank_test_mae  rank_test_rmse  rank_abs_cv_gap  rank_cv_mae_cv  rank_total
+Gradient Boosting            1.0             2.0              2.0             3.0         8.0
+    Random Forest            2.0             3.0              1.0             2.0         8.0
+Linear Regression            3.0             1.0              3.0             1.0         8.0
+
+  NOTE: Linear Regression attains the lowest test RMSE (₹27,897 vs ₹32,716) and the highest test R² (0.792 vs 0.714), while Gradient Boosting attains the lowest test MAE (₹10,135 vs ₹10,760) and MAPE (26.7% vs 28.4%). The mechanism is extrapolation: a linear model fitted in log space keeps extending its trend beyond the range of rents it was trained on, so it gets closer on the handful of very expensive test listings that dominate squared error. A tree ensemble cannot extrapolate at all -- its predictions are bounded by the leaf values it learned -- so it under-predicts those few properties and pays heavily in RMSE, while fitting the other ~99% of listings more accurately. Since the deployed tool estimates rent for ordinary listings, the model with the lower typical error is selected, and the RMSE trade-off is documented rather than hidden.
+
+  saved reports/model_comparison.csv
+
+===============================================================================
+SECTION 8 -- RESIDUAL PLOTS FOR ALL MODELS
+===============================================================================
+  saved reports/figures/residuals_all_models.png
+
+===============================================================================
+SECTION 9 -- WHERE DOES OUTLIER TREATMENT HELP AND WHERE DOES IT HURT?
+===============================================================================
+  MAE within rent bands for Gradient Boosting, by setting:
+setting                1. Raw rent, no treatment  2. log1p target only  3a. log1p + outliers removed  3b. log1p + outliers capped
+rent_band                                                                                                                        
+< ₹15,000                                 3539.0                2528.0                        2482.0                       2524.0
+₹15,000 – ₹40,000                         5843.0                5345.0                        5067.0                       5279.0
+₹40,000 – ₹1,00,000                      18036.0               14798.0                       17360.0                      14531.0
+> ₹1,00,000 (premium)                    70554.0               73887.0                      105137.0                      79468.0
+
+===============================================================================
+SECTION 13 -- PER-CITY PERFORMANCE OF THE SELECTED MODEL
+===============================================================================
+     City  n_test  mean_rent  median_rent    std_rent       rmse        mae    r2   mape  rmse_pct_of_mean  n_localities  train_localities  n_train  unseen_locality_pct
+  Chennai     178 21,613.567   14,000.000  29,072.035 13,145.852  5,894.090 0.794 26.374            60.822           125               278      713               25.300
+Bangalore     177 19,381.531   14,000.000  22,036.258 12,747.532  5,356.535 0.663 24.208            65.772           144               367      709               36.200
+Hyderabad     174 19,845.787   13,000.000  24,011.635 13,369.468  4,967.112 0.688 20.734            67.367           123               303      694               22.400
+   Mumbai     195 85,781.533   50,000.000 109,970.171 63,564.071 25,788.911 0.664 32.651            74.100           163               516      777               45.600
+    Delhi     121 28,708.264   16,500.000  38,203.169 29,721.460 10,099.536 0.390 30.276           103.529            97               251      484               31.400
+  Kolkata     105 13,676.190    9,000.000  18,342.943 17,301.611  4,910.652 0.102 26.563           126.509            76               216      419               35.200
+
+===============================================================================
+SECTION 10 -- RESIDUAL ANALYSIS OF THE SELECTED MODEL
+===============================================================================
+  residual mean   ₹2,905  (a well-calibrated model sits near 0)
+  residual median -₹38
+  residual skew   9.71   kurtosis 185.09
+  corr(predicted, |error|) = 0.642  -> clear funnel: error grows with rent
+  25.5% of test listings predicted within 10% of actual rent; 59.9% within 25%
+
+  Concentration of squared error on the test set:
+    the  1 worst of 950 test rows account for  42.2% of total MSE
+    the  2 worst of 950 test rows account for  50.8% of total MSE
+    the  5 worst of 950 test rows account for  66.4% of total MSE
+    the 10 worst of 950 test rows account for  76.9% of total MSE
+    the 20 worst of 950 test rows account for  85.6% of total MSE
+    the 50 worst of 950 test rows account for  94.2% of total MSE
+    RMSE over all rows            : ₹32,716
+    RMSE excluding the worst 1%   : ₹16,234
+    -> test RMSE is largely a measurement of a handful of premium
+       listings rather than of general accuracy, which is why models
+       are tuned and selected on MAE and RMSE is reported alongside.
+
+  10 worst predictions:
+     City                        Area Locality  BHK  Size  actual_rent  predicted_rent  pct_error  locality_count_in_train
+   Mumbai                                 Juhu    4  5000    1,200,000         544,973        -55                        3
+    Delhi                           Green Park    4   800      350,000          54,298        -84                        1
+   Mumbai                 Lake Superior, Powai    4  3700      230,000         497,219        116                        0
+   Mumbai         Chaitanya Towers, Prabhadevi    3  1600      300,000          88,990        -70                        1
+   Mumbai                Indiabulls Blu, Worli    3  1500      330,000         124,353        -62                        2
+  Kolkata                 Avenue S, Santoshpur    2   950      180,000          11,128        -94                        0
+   Mumbai     Benchmark Solus, Waterfield Road    4  1500      290,000         137,301        -53                        0
+   Mumbai                            Pali Hill    3  1800      400,000         253,177        -37                        1
+Hyderabad  Beeramguda, Ramachandra Puram, NH 9    1  8000      200,000          56,062        -72                        0
+   Mumbai                           Union Park    2  1000      200,000          84,773        -58                        0
+
+===============================================================================
+SECTION 11 -- FEATURE IMPORTANCE
+===============================================================================
+  Top encoded features by impurity-based importance:
+                       feature  importance
+Point of Contact_Contact Agent      0.3342
+                      Bathroom      0.2163
+                   City_Mumbai      0.1131
+                          Size      0.0799
+             carpet_equiv_size      0.0579
+                 Area Locality      0.0537
+                  total_floors      0.0358
+Point of Contact_Contact Owner      0.0342
+                           BHK      0.0295
+                   floor_ratio      0.0077
+                    City_Delhi      0.0074
+                  City_Kolkata      0.0073
+
+  Permutation importance on the held-out test set (10 repeats)...
+          feature  importance_mean  importance_std  r2_drop_mean  r2_drop_std
+             City        7289.9247        584.6080        0.3397       0.0618
+             Size        5506.2071        440.5385        0.3300       0.0369
+         Bathroom        2804.4983        310.7893        0.2190       0.0397
+ Point of Contact        2774.5037        361.5057        0.1960       0.0792
+    Area Locality        1997.7930        248.6398        0.0907       0.0329
+Furnishing Status         334.0205         88.7213        0.0019       0.0068
+              BHK         278.7812         42.0230        0.0038       0.0010
+            Floor         243.8806         71.7560       -0.0102       0.0123
+        Area Type         146.3158        160.0117        0.0074       0.0116
+ Tenant Preferred          22.9641         34.3502       -0.0013       0.0027
+
+  `importance_mean` is the rupee increase in test MAE when that column
+  is randomly shuffled; `r2_drop_mean` is the same test using R².
+  Permutation importance is measured on the ORIGINAL input columns,
+  so it answers 'which attribute matters', while impurity importance is
+  measured on encoded columns and is biased towards high-cardinality
+  features such as the target-encoded locality.
+
+===============================================================================
+SECTION 11 -- LOCALITY ABLATION: DOES LOCALITY DOMINATE?
+===============================================================================
+  A: all features                  test RMSE      ₹32,716  MAE     ₹10,135  R²  0.7144
+  B: without Locality and City     test RMSE      ₹44,728  MAE     ₹13,156  R²  0.4662
+  C: only Locality and City        test RMSE      ₹47,537  MAE     ₹16,514  R²  0.3971
+
+  Dropping Locality and City worsens RMSE by 36.7% (R² 0.714 -> 0.466).
+  Location alone recovers R² 0.397, which is 56% of the full model's R² 0.714.
+  CONCLUSION: Location is the single strongest block of predictors but it does NOT dominate on its own: location-only reaches R² 0.397 versus 0.714 for the full model, so the physical attributes (size, bathrooms, BHK, floor) still contribute materially. Equally, removing location costs 36.7% RMSE, so neither block is redundant.
+
+===============================================================================
+SECTION 14 -- QUANTILE MODELS FOR THE 80% PREDICTION INTERVAL
+===============================================================================
+  fitted and saved alpha=0.1 -> models/quantile_low.joblib
+  fitted and saved alpha=0.9 -> models/quantile_high.joblib
+  empirical coverage on the held-out test set: 77.8% (nominal 80%)
+  median interval width: 74% of actual rent
+
+===============================================================================
+SECTION 15 -- SAVING ARTIFACTS
+===============================================================================
+  saved models/pipeline.joblib (2.2 MB)
+  saved models/feature_meta.json (6 cities, 2240 localities)
+  saved models/metrics.json
+
+===============================================================================
+RUN SUMMARY
+===============================================================================
+  Selected model      : Gradient Boosting
+  Trained under       : 2. log1p target only
+  Test R²             : 0.7144
+  Test RMSE           : ₹32,716
+  Test MAE            : ₹10,135
+  Test MAPE           : 26.7%
+  CV RMSE (5-fold)    : ₹49,039 ± ₹39,836
+  Train→test RMSE gap : -₹25,323
+  80% interval cover  : 77.8%
+  Total runtime       : 8.4 min
+
+  Artifacts in models/ and reports/. Run the app with:  streamlit run app/app.py

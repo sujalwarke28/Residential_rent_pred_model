@@ -1,0 +1,27 @@
+feature,importance
+Point of Contact_Contact Agent,0.33422374570068203
+Bathroom,0.21631919327925073
+City_Mumbai,0.11305848347279875
+Size,0.07993592228791505
+carpet_equiv_size,0.0579197512160867
+Area Locality,0.053713621042907216
+total_floors,0.035759199296856975
+Point of Contact_Contact Owner,0.03419532176837204
+BHK,0.029495987251108524
+floor_ratio,0.007746832059409174
+City_Delhi,0.007417406308339661
+City_Kolkata,0.007293275273534733
+Furnishing Status_Unfurnished,0.004842530657993442
+Furnishing Status_Furnished,0.004826807193641436
+City_Hyderabad,0.004417594767549963
+floor_num,0.0036147175959656054
+Tenant Preferred_Family,0.0019245849071344685
+City_Bangalore,0.0010743425591172003
+Furnishing Status_Semi-Furnished,0.0005359333672988128
+Tenant Preferred_Bachelors,0.0004814794344737678
+City_Chennai,0.00040529107221517184
+Tenant Preferred_Bachelors/Family,0.000364248297441134
+Area Type_Carpet Area,0.0002459318312815599
+Area Type_Super Area,0.00018779935862582432
+Area Type_Built Area,0.0
+Point of Contact_Contact Builder,0.0

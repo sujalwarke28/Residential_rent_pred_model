@@ -1,0 +1,8 @@
+# Extra dependencies needed only to build / execute the analysis notebook.
+# Not required to train the models or run the Streamlit app.
+-r requirements.txt
+
+jupyter==1.1.1
+nbformat==5.11.1
+nbconvert==7.17.1
+ipykernel==7.4.0

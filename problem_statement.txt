@@ -1,0 +1,68 @@
+CASE STUDY 36: Residential Rent Prediction
+
+1. Title
+Residential Rent Prediction Using Machine Learning
+
+2. Problem Statement
+A property rental platform wants to estimate the monthly rent of a residential unit based on
+attributes such as carpet area, number of bedrooms, floor number, furnishing status, locality and
+tenant preference.
+The estimate would help landlords set competitive rents. Dataset: House Rent Prediction Dataset
+(Kaggle; rental listings from Indian cities). If the dataset is unavailable, students may generate
+synthetic data with the same attributes using NumPy/Pandas or make_regression() from
+scikit-learn, and must explain how it was generated.
+
+3. Objectives
+Students should:
+● Perform exploratory data analysis and visualisation.
+● Analyse rental listing data.
+● Handle missing values in area and floor fields.
+● Encode categorical attributes such as furnishing status and locality.
+● Detect and treat outliers in rent values.
+● Develop and train the specified regression models.
+● Compare model performance using appropriate metrics and k-fold cross-validation.
+● Perform residual analysis on the best model.
+● Select the best-performing model with justification.
+● Deploy the model as an interactive prediction application.
+● Analyse limitations and real-world applicability.
+
+4. Machine Learning Algorithms
+● Linear Regression
+● Polynomial Regression
+● Decision Tree Regressor
+● Random Forest Regressor
+● Gradient Boosting Regressor
+
+5. Comparative Study
+Compare:
+● R-squared (R2)
+● Mean Squared Error (MSE)
+● Root Mean Squared Error (RMSE)
+● Mean Absolute Error (MAE)
+● Residual Plot
+Students must particularly analyse the effect of outlier treatment on the model, since a small
+number of premium properties with very high rents can substantially distort a regression model if
+left untreated.
+
+6. Deployment
+Develop a web application where the user enters property attributes and receives:
+● Estimated Monthly Rent
+● Expected error range
+The application should also display the selected model and prediction details where appropriate.
+
+7. Final Analysis
+Students should determine:
+● Attributes with the greatest effect on rent.
+● Best-performing algorithm.
+● The effect of outlier treatment on model performance.
+● Whether locality dominates all other attributes.
+● Limitations of rent estimation across different cities.
+
+8. Questions to Be Answered Using ML
+● Can monthly rent be predicted from property attributes?
+● Which attribute most influences rent?
+● How does outlier treatment affect the model?
+● Does locality dominate the other predictors?
+● Which algorithm achieves the lowest RMSE?
+● How well does the model perform on new listings?
+● Can the model be deployed as a rent estimation tool?

@@ -1,0 +1,26 @@
+# ---- Raw dataset -----------------------------------------------------------
+# The Kaggle House Rent Prediction CSV is not redistributed with this repo.
+# See README.md for where to download it and where to place it.
+data/House_Rent_Dataset.csv
+
+# ---- Virtual environment ---------------------------------------------------
+.venv/
+venv/
+env/
+
+# ---- Python ----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+
+# ---- Trained artifacts (regenerate with `python train.py`) ------------------
+models/*.joblib
+
+# ---- OS / editor -----------------------------------------------------------
+.DS_Store
+.vscode/
+.idea/
+
+# ---- Runtime logs ----------------------------------------------------------
+reports/streamlit.log
